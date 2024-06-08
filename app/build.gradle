@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "org.phindassist.unofficial"
+        minSdk 21
+        targetSdk 33
+        versionCode 151
+        versionName "1.51"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro' // Use custom ProGuard rules
+            debuggable false // Ensure release builds are not debuggable
+        }
+        debug {
+            debuggable true // Ensure debug builds are debuggable
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    namespace 'org.phindassist.unofficial'
+}
+
+dependencies {
+
+}
