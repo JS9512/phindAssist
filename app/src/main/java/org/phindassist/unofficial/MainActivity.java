@@ -1,16 +1,27 @@
 package org.phindassist.unofficial;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.DownloadManager;
+import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.webkit.ConsoleMessage;
+import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 public class MainActivity extends Activity {
 
@@ -45,10 +56,9 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                        requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, 100);
-                    }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, FILE_CHOOSER_REQUEST_CODE);
+                    return false;
                 }
                 if (mUploadMessage != null) {
                     mUploadMessage.onReceiveValue(null);
@@ -80,6 +90,21 @@ public class MainActivity extends Activity {
 
         chatWebSettings.setUserAgentString("Mozilla/5.0 (Linux; Android 12; Unspecified Device) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.79 Mobile Safari/537.36");
 
+        chatWebView.setDownloadListener(new DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long contentLength) {
+                Toast.makeText(context, getString(R.string.downloading), Toast.LENGTH_LONG).show();
+                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                request.setMimeType(mimeType);
+                request.addRequestHeader("Cookie", chatCookieManager.getCookie(url));
+                request.addRequestHeader("Accept", "text/html, application/xhtml+xml, */*");
+                request.addRequestHeader("Referer", url);
+                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                dm.enqueue(request);
+            }
+        });
+
         String urlToLoad = "https://phind.com/";
         chatWebView.loadUrl(urlToLoad);
     }
@@ -87,13 +112,14 @@ public class MainActivity extends Activity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            if (keyCode == KeyEvent.KEYCODE_BACK) {
-                if (chatWebView.canGoBack()) {
-                    chatWebView.goBack();
-                } else {
-                    finish();
-                }
-                return true;
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_BACK:
+                    if (chatWebView.canGoBack()) {
+                        chatWebView.goBack();
+                    } else {
+                        finish();
+                    }
+                    return true;
             }
         }
         return super.onKeyDown(keyCode, event);
@@ -102,45 +128,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent intent) {
         super.onActivityResult(requestCode, resultCode, intent);
-        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
-            if (mUploadMessage == null) return;
-            Uri[] result = null;
-            if (resultCode == Activity.RESULT_OK) {
-                if (intent != null) {
-                    String dataString = intent.getDataString();
-                    if (dataString != null) {
-                        result = new Uri[]{Uri.parse(dataString)};
-                    }
-                }
-            }
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE && mUploadMessage != null) {
+            Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, intent);
             mUploadMessage.onReceiveValue(result);
             mUploadMessage = null;
         }
     }
 
     @Override
-    public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
-        super.onCreateContextMenu(menu, v, menuInfo);
-        WebView.HitTestResult result = chatWebView.getHitTestResult();
-        String url = "";
-        if (result.getExtra() != null) {
-            if (result.getType() == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE || result.getType() == WebView.HitTestResult.IMAGE_TYPE) {
-                url = result.getExtra();
-                if (url != null) {
-                    Toast.makeText(this, getString(R.string.downloading), Toast.LENGTH_LONG).show();
-                    String filename = URLUtil.guessFileName(url, null, null);
-                    Uri source = Uri.parse(url);
-                    DownloadManager.Request request = new DownloadManager.Request(source);
-                    request.addRequestHeader("Cookie", chatCookieManager.getCookie(url));
-                    request.addRequestHeader("Accept", "text/html, application/xhtml+xml, */*");
-                    request.addRequestHeader("Accept-Language", "en-US,en;q=0.7,he;q=0.3");
-                    request.addRequestHeader("Referer", url);
-                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename);
-                    DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-                    dm.enqueue(request);
-                }
-            }
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            // Permission granted, proceed with file chooser or other actions requiring permission
+        } else {
+            // Permission denied, inform user or disable functionality
         }
     }
 }
